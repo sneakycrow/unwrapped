@@ -32,8 +32,10 @@ async fn main() {
     Migrator::up(&connection, None)
         .await
         .expect("Failed to migrate database");
+    // Construct shared app state
+    let state = routes::AppState { connection };
     // Initialize the API
-    let app = routes::router(connection).layer(
+    let app = routes::router(state).layer(
         TraceLayer::new_for_http()
             .make_span_with(DefaultMakeSpan::new())
             .on_request(DefaultOnRequest::new().level(Level::INFO))

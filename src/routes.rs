@@ -12,11 +12,16 @@ use axum::{
     Json, Router,
 };
 
-pub fn router(pool: DatabaseConnection) -> Router {
+#[derive(Clone)]
+pub struct AppState {
+    pub connection: DatabaseConnection,
+}
+
+pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/collect", get(collect))
-        .with_state(pool)
+        .with_state(state)
 }
 
 async fn index() -> Html<String> {
@@ -42,14 +47,16 @@ struct Tokens {
 }
 
 async fn collect(
-    State(_pool): State<DatabaseConnection>,
+    State(_state): State<AppState>,
     tokens: Query<Tokens>,
 ) -> Json<CollectionResponse> {
     let access_token = tokens.access_token.to_owned();
-    let tracks = SpotifyClient::new(access_token)
+    let response = SpotifyClient::new(access_token)
         .get_recent_tracks()
         .await
-        .expect("Failed to fetch recent tracks");
+        .expect("Failed to collect spotify data");
 
-    Json(CollectionResponse { data: tracks.items })
+    Json(CollectionResponse {
+        data: response.items,
+    })
 }
