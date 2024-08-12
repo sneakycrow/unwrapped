@@ -2,4 +2,5 @@
 
 pub mod prelude;
 
+pub mod album;
 pub mod recent_track;

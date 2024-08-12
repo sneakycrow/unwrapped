@@ -56,8 +56,7 @@ async fn collect(
         .await
         .expect("Failed to collect spotify data");
 
-    // TODO: Save recent tracks to database
     Json(CollectionResponse {
-        data: response.items,
+        data: response.items.unwrap_or(vec![]),
     })
 }

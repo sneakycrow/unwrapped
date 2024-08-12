@@ -1,7 +1,11 @@
 use serde::{Deserialize, Serialize};
+use tracing::error;
 
-#[derive(Debug)]
-pub struct SpotifyError;
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpotifyError {
+    status: u16,
+    message: String,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Track {
@@ -50,7 +54,8 @@ pub struct SpotifyClient {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RecentTracksResponse {
-    pub items: Vec<RecentTrack>,
+    pub items: Option<Vec<RecentTrack>>,
+    pub error: Option<SpotifyError>,
 }
 
 impl SpotifyClient {
@@ -67,10 +72,18 @@ impl SpotifyClient {
             .recv_json()
             .await
             .map_err(|err| {
-                dbg!(err);
-                SpotifyError
+                error!("Failed to get recent tracks from Spotify: {:?}", err);
+                SpotifyError {
+                    status: 500,
+                    message: "Internal error requesting recent tracks from Spotify".to_string(),
+                }
             })?;
-
+        // If we received an error from Spotify, it should still parse as an Ok result
+        // but we still represent this as an error, just a recoverable parsed error
+        if let Some(error) = tracks.error {
+            error!("Spotify API returned an error: {:?}", error);
+            return Err(error);
+        }
         Ok(tracks)
     }
 }

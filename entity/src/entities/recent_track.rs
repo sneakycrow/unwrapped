@@ -9,9 +9,28 @@ pub struct Model {
     pub id: i32,
     pub title: String,
     pub artist: String,
+    pub played_at: DateTime,
+    pub provider_id: String,
+    pub provider: String,
+    pub album_id: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::album::Entity",
+        from = "Column::AlbumId",
+        to = "super::album::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Album,
+}
+
+impl Related<super::album::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Album.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}
