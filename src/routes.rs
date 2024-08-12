@@ -98,7 +98,7 @@ async fn collect(
                                 "Error collecting spotify data".to_string(),
                             )
                         })?;
-                    // Since we updated the access token, return it as well so the client can update it
+                    // Since we updated the access token, return it as well so the client can save it
                     Ok(Json(CollectionResponse {
                         data: recent_tracks.items.unwrap_or_default(),
                         updated_token: Some(new_token.access_token),
