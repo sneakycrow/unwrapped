@@ -8,8 +8,8 @@ alias dev := start
 start:
     cargo run -p unwrapped
 
-migrate:
-    sea-orm-cli migrate
+migrate *FLAGS:
+    sea-orm-cli migrate {{FLAGS}}
 
 generate: generate-entities
 generate-entities:
