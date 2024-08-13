@@ -3,4 +3,8 @@
 pub mod prelude;
 
 pub mod album;
-pub mod recent_track;
+pub mod album_artist;
+pub mod album_track;
+pub mod artist;
+pub mod play_log;
+pub mod track;

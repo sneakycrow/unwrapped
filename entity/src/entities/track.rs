@@ -3,29 +3,21 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "album")]
+#[sea_orm(table_name = "track")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     pub title: String,
-    pub release_date: Date,
-    pub r#type: String,
     pub created_at: DateTime,
     pub updated_at: Option<DateTime>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::album_artist::Entity")]
-    AlbumArtist,
     #[sea_orm(has_many = "super::album_track::Entity")]
     AlbumTrack,
-}
-
-impl Related<super::album_artist::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::AlbumArtist.def()
-    }
+    #[sea_orm(has_many = "super::play_log::Entity")]
+    PlayLog,
 }
 
 impl Related<super::album_track::Entity> for Entity {
@@ -34,21 +26,18 @@ impl Related<super::album_track::Entity> for Entity {
     }
 }
 
-impl Related<super::artist::Entity> for Entity {
+impl Related<super::play_log::Entity> for Entity {
     fn to() -> RelationDef {
-        super::album_artist::Relation::Artist.def()
-    }
-    fn via() -> Option<RelationDef> {
-        Some(super::album_artist::Relation::Album.def().rev())
+        Relation::PlayLog.def()
     }
 }
 
-impl Related<super::track::Entity> for Entity {
+impl Related<super::album::Entity> for Entity {
     fn to() -> RelationDef {
-        super::album_track::Relation::Track.def()
+        super::album_track::Relation::Album.def()
     }
     fn via() -> Option<RelationDef> {
-        Some(super::album_track::Relation::Album.def().rev())
+        Some(super::album_track::Relation::Track.def().rev())
     }
 }
 

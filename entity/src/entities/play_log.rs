@@ -3,33 +3,29 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "recent_track")]
+#[sea_orm(table_name = "play_log")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
-    pub title: String,
-    pub artist: String,
+    pub track_id: i32,
     pub played_at: DateTime,
-    pub provider_id: String,
-    pub provider: String,
-    pub album_id: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::album::Entity",
-        from = "Column::AlbumId",
-        to = "super::album::Column::Id",
+        belongs_to = "super::track::Entity",
+        from = "Column::TrackId",
+        to = "super::track::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
-    Album,
+    Track,
 }
 
-impl Related<super::album::Entity> for Entity {
+impl Related<super::track::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Album.def()
+        Relation::Track.def()
     }
 }
 
