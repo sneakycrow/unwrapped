@@ -1,6 +1,6 @@
 use crate::{
     assets::Assets,
-    music::spotify::{RecentTrack, SpotifyClient},
+    music::spotify::{RecentTrack, SpotifyClient, SpotifyError},
 };
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,7 @@ struct Tokens {
     refresh_token: Option<String>,
 }
 
+/// Collect goes to each of the configured providers, collects the relative data, and saves it to the DB
 async fn collect(
     State(_state): State<AppState>,
     tokens: Query<Tokens>,
@@ -58,17 +59,33 @@ async fn collect(
     // Collect the tokens from the query
     let access_token = tokens.access_token.to_owned();
     let refresh_token = tokens.refresh_token.to_owned();
+    // Get the recent tracks from Spotify
+    let recent_tracks = collect_recent_tracks(access_token, refresh_token).await;
+    match recent_tracks {
+        Ok(recent_tracks) => Ok(Json(recent_tracks)),
+        Err(spotify_err) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error collecting spotify data: {:?}", spotify_err),
+        )),
+    }
+}
+
+/// An internal function for collecting recent tracks from Spotify
+/// In addition to getting the tracks, this function also handles refreshing the access token if it is invalid
+async fn collect_recent_tracks(
+    access_token: String,
+    refresh_token: Option<String>,
+) -> Result<CollectionResponse, SpotifyError> {
     // Generate a client for interacting with Spotify
     let client = SpotifyClient::new(access_token).set_refresh_token(refresh_token);
     // Fetch the recent tracks from Spotify
-    let recent_tracks_response = client.get_recent_tracks().await;
-    match recent_tracks_response {
+    match client.get_recent_tracks().await {
         Ok(recent_tracks) => {
             debug!("Successfully collected spotify data");
-            Ok(Json(CollectionResponse {
+            Ok(CollectionResponse {
                 data: recent_tracks.items.unwrap_or_default(),
                 updated_token: None,
-            }))
+            })
         }
         Err(spotify_err) => {
             match spotify_err.status {
@@ -98,19 +115,16 @@ async fn collect(
                                 "Error collecting spotify data".to_string(),
                             )
                         })?;
-                    // Since we updated the access token, return it as well so the client can save it
-                    Ok(Json(CollectionResponse {
-                        data: recent_tracks.items.unwrap_or_default(),
+                    // Return the recent tracks and the new access token
+                    Ok(CollectionResponse {
+                        data: recent_tracks,
                         updated_token: Some(new_token.access_token),
-                    }))
+                    })
                 }
                 // Any other errors aren't specifically handled, so we log the error and return a 500
                 _ => {
                     error!("Error collecting spotify data: {:?}", spotify_err);
-                    Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Error collecting spotify data".to_string(),
-                    ))
+                    Err(spotify_err)
                 }
             }
         }
