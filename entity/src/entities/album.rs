@@ -9,7 +9,6 @@ pub struct Model {
     pub id: i32,
     pub title: String,
     pub release_date: Date,
-    pub r#type: String,
     pub created_at: DateTime,
     pub updated_at: Option<DateTime>,
 }

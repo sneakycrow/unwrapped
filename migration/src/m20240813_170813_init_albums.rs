@@ -16,7 +16,6 @@ impl MigrationTrait for Migration {
                     .col(pk_auto(Album::Id))
                     .col(string(Album::Title))
                     .col(date(Album::ReleaseDate))
-                    .col(string(Album::Type))
                     .col(
                         ColumnDef::new(Album::CreatedAt)
                             .not_null()
@@ -42,7 +41,6 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(AlbumArtist::AlbumId).integer().not_null())
                     .col(ColumnDef::new(AlbumArtist::ArtistId).integer().not_null())
-                    .col(string(AlbumArtist::ContributionType))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_album_artist_album_id")
@@ -82,7 +80,6 @@ pub enum Album {
     Id,
     Title,
     ReleaseDate,
-    Type, // Type of album, e.g. 'album', 'single'
     CreatedAt,
     UpdatedAt,
 }
@@ -92,5 +89,4 @@ enum AlbumArtist {
     Table,
     AlbumId,
     ArtistId,
-    ContributionType, // Type of contribution, e.g. 'Main Artist', 'Featured Artist'
 }

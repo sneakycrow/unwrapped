@@ -1,12 +1,7 @@
-use sea_orm::{ConnectOptions, Database, DatabaseConnection};
-use serde::Serialize;
-use std::time::Duration;
+pub mod spotify;
 
-#[derive(Serialize)]
-pub struct Tokens {
-    pub access_token: String,
-    pub refresh_token: String,
-}
+use sea_orm::{ConnectOptions, Database, DatabaseConnection};
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct DBError;

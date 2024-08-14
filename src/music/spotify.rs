@@ -1,9 +1,11 @@
 use base64::prelude::*;
+use entity::{album, artist};
+use sea_orm::{prelude::Date, ActiveValue, NotSet};
 use serde::{Deserialize, Serialize};
 use surf::http::mime;
 use tracing::{debug, error};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SpotifyError {
     pub status: u16,
     pub message: String,
@@ -16,29 +18,61 @@ pub struct Track {
     external_urls: ExternalUrls,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+impl Into<entity::track::Entity> for Track {
+    fn into(self) -> entity::prelude::Track {
+        entity::prelude::Track {}
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Artist {
+    pub name: String,
+    external_urls: ExternalUrls,
+}
+
+impl Artist {
+    pub fn model(&self) -> artist::ActiveModel {
+        artist::ActiveModel {
+            id: NotSet,
+            name: ActiveValue::set(self.name.clone()),
+            created_at: NotSet,
+            updated_at: NotSet,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Album {
     images: Vec<AlbumImage>,
     name: String,
     release_date: String,
+    album_type: String,
     external_urls: ExternalUrls,
-    artists: Vec<Artist>,
+    pub artists: Vec<Artist>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Artist {
-    name: String,
-    external_urls: ExternalUrls,
+impl Album {
+    pub fn model(&self) -> album::ActiveModel {
+        let release_date = Date::parse_from_str(&self.release_date, "%Y-%m-%d")
+            .expect("Failed to parse release date");
+        album::ActiveModel {
+            id: NotSet,
+            title: ActiveValue::set(self.name.clone()),
+            release_date: ActiveValue::set(release_date),
+            created_at: NotSet,
+            updated_at: NotSet,
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AlbumImage {
     url: String,
     width: u32,
     height: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalUrls {
     spotify: String,
 }
@@ -47,6 +81,25 @@ pub struct ExternalUrls {
 pub struct RecentTrack {
     track: Track,
     played_at: String,
+}
+
+pub trait RecentTrackExt {
+    fn artists(&self) -> Vec<Artist>;
+    fn albums(&self) -> Vec<Album>;
+}
+
+impl RecentTrackExt for Vec<RecentTrack> {
+    /// Gets all the artists from the recent tracks
+    fn artists(&self) -> Vec<Artist> {
+        self.iter()
+            .map(|track| track.track.album.artists.clone())
+            .flatten()
+            .collect()
+    }
+    /// Gets all the albums from the recent tracks
+    fn albums(&self) -> Vec<Album> {
+        self.iter().map(|track| track.track.album.clone()).collect()
+    }
 }
 
 /// The primary client for interacting with the Spotify API

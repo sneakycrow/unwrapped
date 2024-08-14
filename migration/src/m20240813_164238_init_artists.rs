@@ -12,7 +12,7 @@ impl MigrationTrait for Migration {
                     .table(Artist::Table)
                     .if_not_exists()
                     .col(pk_auto(Artist::Id))
-                    .col(string(Artist::Name))
+                    .col(string(Artist::Name).unique_key())
                     .col(
                         ColumnDef::new(Artist::CreatedAt)
                             .not_null()
