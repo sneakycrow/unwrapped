@@ -3,7 +3,7 @@ use crate::{
     db,
     music::spotify::{RecentTrack, RecentTrackExt, SpotifyClient, SpotifyError},
 };
-use entity::{album, artist};
+use entity::{album, artist, track};
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
 
@@ -90,12 +90,14 @@ async fn collect(
         .into_iter()
         // Convert to Album and AlbumArtist models using the artist ID's
         .map(|album| {
+            // Get the album active model
             let db_album = album.model();
+            // Find the artists for the album
             let album_artists: Vec<artist::Model> = album
                 // Iterate over all the album artists from spotify
                 .artists
                 .iter()
-                // Find the db artist and save their type
+                // Find the relative db artists based on the recent tracks album artists
                 .map(|alb_artist| {
                     db_artists
                         .iter()
@@ -114,7 +116,27 @@ async fn collect(
     let db_albums_with_artists = db::spotify::upsert_albums_with_artists(raw_albums_with_artists)
         .await
         .expect("Error upserting albums");
-    // Lastly, we upsert the tracks, making sure to get the ID's of the tracks, using the album ID's
+    // Lastly, we upsert the tracks, making sure to get the ID's of the tracks, using the album ID's and artist ID's
+    debug!("Parsing tracks from recent tracks");
+    // Each track should reference an artist and an album, and then use the album to also create an album track
+    let raw_tracks_with_albums: Vec<(track::ActiveModel, album::Model)> = recent_tracks
+        .into_iter()
+        .map(|recent_track| {
+            // Get the track active model
+            let db_track = recent_track.track.model();
+            // Find the album
+            let db_album = db_albums_with_artists
+                .iter()
+                .find(|album| album.title == recent_track.track.album.name)
+                .expect("Album not found")
+                .to_owned();
+            (db_track, db_album)
+        })
+        .collect();
+    // Upsert the tracks with their albums, returning the tracks with their ID's
+    let db_tracks_with_albums = db::spotify::upsert_tracks_with_albums(raw_tracks_with_albums)
+        .await
+        .expect("Error upserting tracks");
     // Return the response
     Ok(Json(CollectionResponse { updated_token }))
 }

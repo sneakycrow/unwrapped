@@ -1,4 +1,4 @@
-use entity::{album, album_artist, artist};
+use entity::{album, album_artist, album_track, artist, track};
 use migration::{Expr, IntoCondition, OnConflict};
 use sea_orm::{ActiveValue, Condition, EntityTrait, QueryFilter, TransactionTrait};
 use tokio::task::JoinSet;
@@ -58,7 +58,7 @@ pub async fn upsert_artists(
 }
 
 /// A function for upserting albums and their artists into the database
-/// Returns all the IDs of the albums and album_artists that were upserted
+/// Returns all the IDs of the albums
 /// The album_artists are the artists that are associated with the album
 pub async fn upsert_albums_with_artists(
     albums_with_artists: Vec<(album::ActiveModel, Vec<artist::Model>)>,
@@ -133,4 +133,79 @@ async fn insert_album_with_artists(
         DBError
     })?;
     Ok(album_model)
+}
+
+/// A function for upserting tracks with their albums
+/// Returns all the IDs of the tracks that were upserted
+/// The album_id is the ID of the album that the track is associated with
+pub async fn upsert_tracks_with_albums(
+    tracks_with_ablums: Vec<(track::ActiveModel, album::Model)>,
+) -> Result<Vec<track::Model>, DBError> {
+    // First, create individual queries for each track with its album
+    type TrackSaveResult = JoinSet<Result<track::Model, DBError>>;
+    let mut track_queries: TrackSaveResult = JoinSet::new();
+    for (track, album) in tracks_with_ablums {
+        let track_query = insert_track_with_album(track, album);
+        track_queries.spawn(track_query);
+    }
+    // Execute each query, saving tracks
+    let mut tracks: Vec<track::Model> = vec![];
+    while let Some(res) = track_queries.join_next().await {
+        match res {
+            Ok(Ok(track_model)) => {
+                debug!("Track was inserted: {:?}", track_model);
+                tracks.push(track_model);
+            }
+            Ok(Err(db_err)) => {
+                error!("Error inserting track: {:?}", db_err);
+                return Err(DBError);
+            }
+            Err(join_err) => {
+                error!("Error joining track insert: {:?}", join_err);
+                return Err(DBError);
+            }
+        }
+    }
+    // Return the tracks that were inserted
+    Ok(tracks)
+}
+
+/// An internal function for composing a transaction to insert a track with its album
+/// The album_id is the ID of the album that the track is associated with
+/// The track is the track to insert
+async fn insert_track_with_album(
+    track: track::ActiveModel,
+    album: album::Model,
+) -> Result<track::Model, DBError> {
+    let conn = get_connection().await?;
+    // Start a transaction
+    let txn = conn.begin().await.map_err(|sea_err| {
+        error!("Error starting transaction for track: {:?}", sea_err);
+        DBError
+    })?;
+    // Insert the track
+    let track_model = track::Entity::insert(track)
+        .exec_with_returning(&txn)
+        .await
+        .map_err(|sea_err| {
+            error!("Error inserting track: {:?}", sea_err);
+            DBError
+        })?;
+    // Insert the track album
+    album_track::Entity::insert(album_track::ActiveModel {
+        track_id: ActiveValue::set(track_model.id),
+        album_id: ActiveValue::set(album.id),
+    })
+    .exec(&txn)
+    .await
+    .map_err(|sea_err| {
+        error!("Error inserting track album: {:?}", sea_err);
+        DBError
+    })?;
+    // Commit the transaction
+    txn.commit().await.map_err(|sea_err| {
+        error!("Error committing transaction for track: {:?}", sea_err);
+        DBError
+    })?;
+    Ok(track_model)
 }

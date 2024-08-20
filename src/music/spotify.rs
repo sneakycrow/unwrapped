@@ -13,8 +13,8 @@ pub struct SpotifyError {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Track {
-    name: String,
-    album: Album,
+    pub name: String,
+    pub album: Album,
     external_urls: ExternalUrls,
 }
 
@@ -44,7 +44,7 @@ impl Artist {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Album {
     images: Vec<AlbumImage>,
-    name: String,
+    pub name: String,
     release_date: String,
     album_type: String,
     external_urls: ExternalUrls,
@@ -79,8 +79,19 @@ pub struct ExternalUrls {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RecentTrack {
-    track: Track,
-    played_at: String,
+    pub track: Track,
+    pub played_at: String,
+}
+
+impl Track {
+    pub fn model(&self) -> entity::track::ActiveModel {
+        entity::track::ActiveModel {
+            id: NotSet,
+            title: ActiveValue::set(self.name.clone()),
+            created_at: NotSet,
+            updated_at: NotSet,
+        }
+    }
 }
 
 pub trait RecentTrackExt {
