@@ -1,13 +1,13 @@
 use crate::{
-    db::{self, DBError},
+    db::{self, spotify::upsert_playlogs, DBError},
     music::spotify::{RecentTrack, RecentTrackExt, SpotifyClient, SpotifyError},
 };
 use axum::{
     extract::{Query, State},
     http::StatusCode,
 };
-use entity::{album, artist, track};
-use sea_orm::DatabaseConnection;
+use entity::{album, artist, play_log, track};
+use sea_orm::{sqlx::types::chrono::DateTime, ActiveValue::NotSet, DatabaseConnection, Set};
 use serde::Deserialize;
 use tracing::{debug, error};
 
@@ -175,6 +175,43 @@ impl Collection {
         self.db_tracks = Some(db_tracks_with_albums);
         Ok(self)
     }
+    /// Upsert the playlogs from the recent tracks into the database
+    async fn upsert_playlogs(&mut self, conn: &DatabaseConnection) -> Result<&mut Self, DBError> {
+        // Finally, create the playlogs from the recent tracks
+        let raw_playlogs: Vec<play_log::ActiveModel> = self
+            .recent_tracks
+            .as_ref()
+            .expect("No recent tracks found, cannot upsert playlogs")
+            .into_iter()
+            .map(|recent_track| {
+                // Get the track
+                let db_track = self
+                    .db_tracks
+                    .as_ref()
+                    .expect("No tracks found, cannot parse track for upserting playlog")
+                    .iter()
+                    .find(|track| track.title == recent_track.track.name)
+                    .expect("Track not found")
+                    .to_owned();
+                // Parse the played_at into a DateTime timestamp. Should be up to seconds
+                let timestamp = DateTime::parse_from_rfc3339(&recent_track.played_at)
+                    .expect("Error parsing played_at from track")
+                    .naive_utc();
+                // Create the playlog
+                play_log::ActiveModel {
+                    id: NotSet,
+                    track_id: Set(db_track.id),
+                    played_at: Set(timestamp),
+                }
+            })
+            .collect();
+
+        db::spotify::upsert_playlogs(raw_playlogs, conn)
+            .await
+            .expect("Error upserting playlogs");
+
+        Ok(self)
+    }
 }
 
 /// Collect goes to each of the configured providers, collects the relative data, and saves it to the DB
@@ -214,8 +251,15 @@ pub async fn route(
         .map_err(|db_err| {
             error!("Error upserting tracks: {:?}", db_err);
             (StatusCode::INTERNAL_SERVER_ERROR, db_err.to_string())
+        })?
+        // Finally, save the playlogs
+        .upsert_playlogs(&state.connection)
+        .await
+        .map_err(|db_err| {
+            error!("Error upserting playlogs: {:?}", db_err);
+            (StatusCode::INTERNAL_SERVER_ERROR, db_err.to_string())
         })?;
-    // TODO: Lastly, we need to create the playlog entries
-    // Return the response
+    // Return Ok if everything was successful
+    debug!("Successfully collected and upserted recent tracks");
     Ok(())
 }

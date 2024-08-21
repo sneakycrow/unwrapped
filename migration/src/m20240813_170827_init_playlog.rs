@@ -18,7 +18,7 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(PlayLog::PlayedAt)
                             .not_null()
                             .timestamp()
-                            .default(SimpleExpr::Keyword(Keyword::CurrentTimestamp)),
+                            .unique_key(),
                     )
                     .foreign_key(
                         ForeignKey::create()

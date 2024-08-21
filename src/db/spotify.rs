@@ -1,4 +1,4 @@
-use entity::{album, album_artist, album_track, artist, track};
+use entity::{album, album_artist, album_track, artist, play_log, track};
 use migration::{Expr, IntoCondition, OnConflict};
 use sea_orm::{
     ActiveValue, Condition, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait,
@@ -216,4 +216,27 @@ async fn insert_track_with_album(
         DBError
     })?;
     Ok(track_model)
+}
+
+/// A function for upserting play logs
+pub async fn upsert_playlogs(
+    playlogs: Vec<play_log::ActiveModel>,
+    conn: &DatabaseConnection,
+) -> Result<(), DBError> {
+    play_log::Entity::insert_many(playlogs)
+        .on_conflict(
+            OnConflict::column(play_log::Column::PlayedAt)
+                .do_nothing()
+                .to_owned(),
+        )
+        .do_nothing()
+        .exec(conn)
+        .await
+        .map_err(|db_err| {
+            error!("Error inserting play logs: {:?}", db_err);
+            DBError
+        })
+        .map(|_| {
+            debug!("Inserted play logs");
+        })
 }
