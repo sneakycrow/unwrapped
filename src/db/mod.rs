@@ -6,6 +6,12 @@ use std::time::Duration;
 #[derive(Debug)]
 pub struct DBError;
 
+impl std::fmt::Display for DBError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Database Error")
+    }
+}
+
 // A function for getting a pool of database connections
 pub async fn get_connection() -> Result<DatabaseConnection, DBError> {
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");

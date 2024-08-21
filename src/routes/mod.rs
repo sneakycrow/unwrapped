@@ -1,3 +1,4 @@
+mod auth;
 mod collect;
 
 use crate::assets::Assets;
@@ -10,10 +11,14 @@ pub struct AppState {
 }
 
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    let auth_router = auth::get_auth_router();
+    let collect_router = Router::new()
         .route("/", get(index))
-        .route("/collect", get(collect::route))
+        .route("/collect", get(collect::route));
+    Router::new()
+        .merge(collect_router)
         .with_state(state)
+        .merge(auth_router)
 }
 
 async fn index() -> Html<String> {

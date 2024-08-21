@@ -1,17 +1,19 @@
 use entity::{album, album_artist, album_track, artist, track};
 use migration::{Expr, IntoCondition, OnConflict};
-use sea_orm::{ActiveValue, Condition, EntityTrait, QueryFilter, TransactionTrait};
+use sea_orm::{
+    ActiveValue, Condition, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait,
+};
 use tokio::task::JoinSet;
 use tracing::{debug, error};
 
-use crate::db::{get_connection, DBError};
+use crate::db::DBError;
 
 /// A function for upserting artists into the database
 /// Returns all the IDs of the artists that were upserted
 pub async fn upsert_artists(
     artists: Vec<artist::ActiveModel>,
+    conn: &DatabaseConnection,
 ) -> Result<Vec<artist::Model>, DBError> {
-    let conn = get_connection().await?;
     // Insert_many the artists into the database
     let res = artist::Entity::insert_many(artists.clone())
         .on_conflict(
@@ -20,7 +22,7 @@ pub async fn upsert_artists(
                 .to_owned(),
         )
         .do_nothing()
-        .exec(&conn)
+        .exec(conn)
         .await;
     // If we successfully inserted the artists, return the models we inserted
     match res {
@@ -43,7 +45,7 @@ pub async fn upsert_artists(
                         )
                         .into_condition(),
                 )
-                .all(&conn)
+                .all(conn)
                 .await
                 .map_err(|sea_err| {
                     error!("Error looking up artists: {:?}", sea_err);
@@ -62,14 +64,18 @@ pub async fn upsert_artists(
 /// The album_artists are the artists that are associated with the album
 pub async fn upsert_albums_with_artists(
     albums_with_artists: Vec<(album::ActiveModel, Vec<artist::Model>)>,
+    conn: &DatabaseConnection,
 ) -> Result<Vec<album::Model>, DBError> {
     // First, create individual queries for each album with its artists
     type AlbumSaveResult = JoinSet<Result<album::Model, DBError>>;
     let mut album_queries: AlbumSaveResult = JoinSet::new();
-    for (album, artists) in albums_with_artists {
-        let album_query = insert_album_with_artists(album, artists);
-        album_queries.spawn(album_query);
-    }
+    albums_with_artists
+        .into_iter()
+        .for_each(|(album, artists)| {
+            let album_conn = conn.clone();
+            let album_query = insert_album_with_artists(album, artists, album_conn);
+            album_queries.spawn(album_query);
+        });
     // Execute each query, saving albums
     let mut albums: Vec<album::Model> = vec![];
     while let Some(res) = album_queries.join_next().await {
@@ -96,8 +102,8 @@ pub async fn upsert_albums_with_artists(
 async fn insert_album_with_artists(
     album: album::ActiveModel,
     artists: Vec<artist::Model>,
+    conn: DatabaseConnection,
 ) -> Result<album::Model, DBError> {
-    let conn = get_connection().await?;
     // Start a transaction
     let txn = conn.begin().await.map_err(|sea_err| {
         error!("Error starting transaction for album: {:?}", sea_err);
@@ -140,14 +146,16 @@ async fn insert_album_with_artists(
 /// The album_id is the ID of the album that the track is associated with
 pub async fn upsert_tracks_with_albums(
     tracks_with_ablums: Vec<(track::ActiveModel, album::Model)>,
+    conn: &DatabaseConnection,
 ) -> Result<Vec<track::Model>, DBError> {
     // First, create individual queries for each track with its album
     type TrackSaveResult = JoinSet<Result<track::Model, DBError>>;
     let mut track_queries: TrackSaveResult = JoinSet::new();
-    for (track, album) in tracks_with_ablums {
-        let track_query = insert_track_with_album(track, album);
+    tracks_with_ablums.into_iter().for_each(|(track, album)| {
+        let track_conn = conn.clone();
+        let track_query = insert_track_with_album(track, album, track_conn);
         track_queries.spawn(track_query);
-    }
+    });
     // Execute each query, saving tracks
     let mut tracks: Vec<track::Model> = vec![];
     while let Some(res) = track_queries.join_next().await {
@@ -176,8 +184,8 @@ pub async fn upsert_tracks_with_albums(
 async fn insert_track_with_album(
     track: track::ActiveModel,
     album: album::Model,
+    conn: DatabaseConnection,
 ) -> Result<track::Model, DBError> {
-    let conn = get_connection().await?;
     // Start a transaction
     let txn = conn.begin().await.map_err(|sea_err| {
         error!("Error starting transaction for track: {:?}", sea_err);
