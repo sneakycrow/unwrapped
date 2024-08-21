@@ -25,3 +25,4 @@ sea-orm = { version = "1.0.0", features = [
     "runtime-tokio-rustls",
     "macros",
 ] }
+base64 = "0.22.1"

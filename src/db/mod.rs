@@ -1,15 +1,16 @@
-use sea_orm::{ConnectOptions, Database, DatabaseConnection};
-use serde::Serialize;
-use std::time::Duration;
+pub mod spotify;
 
-#[derive(Serialize)]
-pub struct Tokens {
-    pub access_token: String,
-    pub refresh_token: String,
-}
+use sea_orm::{ConnectOptions, Database, DatabaseConnection};
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct DBError;
+
+impl std::fmt::Display for DBError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Database Error")
+    }
+}
 
 // A function for getting a pool of database connections
 pub async fn get_connection() -> Result<DatabaseConnection, DBError> {
