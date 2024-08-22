@@ -1,5 +1,5 @@
 use entity::{account, user};
-use sea_orm::{ActiveValue::NotSet, DatabaseConnection, EntityTrait, Set, TryIntoModel};
+use sea_orm::{ActiveValue::NotSet, DatabaseConnection, EntityTrait, Set};
 
 /// Options when creating a user with an account
 struct CreateUserOptions {

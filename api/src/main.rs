@@ -1,8 +1,7 @@
 mod assets;
-mod db;
-mod music;
 mod routes;
 
+use lib::db;
 use migration::{Migrator, MigratorTrait};
 use tokio::net::TcpListener;
 use tower_http::{
