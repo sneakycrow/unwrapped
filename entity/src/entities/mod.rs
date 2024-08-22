@@ -2,9 +2,11 @@
 
 pub mod prelude;
 
+pub mod account;
 pub mod album;
 pub mod album_artist;
 pub mod album_track;
 pub mod artist;
 pub mod play_log;
 pub mod track;
+pub mod user;
