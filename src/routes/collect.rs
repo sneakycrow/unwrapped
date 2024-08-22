@@ -1,5 +1,5 @@
 use crate::{
-    db::{self, spotify::upsert_playlogs, DBError},
+    db::{self, DBError},
     music::spotify::{RecentTrack, RecentTrackExt, SpotifyClient, SpotifyError},
 };
 use axum::{
