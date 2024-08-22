@@ -1,12 +1,12 @@
-use crate::{
-    db::{self, DBError},
-    music::spotify::{RecentTrack, RecentTrackExt, SpotifyClient, SpotifyError},
-};
 use axum::{
     extract::{Query, State},
     http::StatusCode,
 };
 use entity::{album, artist, play_log, track};
+use lib::{
+    db::{self, DBError},
+    music::spotify::{RecentTrack, RecentTrackExt, SpotifyClient, SpotifyError},
+};
 use sea_orm::{sqlx::types::chrono::DateTime, ActiveValue::NotSet, DatabaseConnection, Set};
 use serde::Deserialize;
 use tracing::{debug, error};

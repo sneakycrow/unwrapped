@@ -43,7 +43,6 @@ async fn spotify_auth() -> impl IntoResponse {
 #[derive(Deserialize, Debug)]
 struct SpotifyCallbackQuery {
     code: String,
-    state: Option<String>,
 }
 
 #[derive(Serialize)]
