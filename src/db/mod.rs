@@ -1,4 +1,5 @@
 pub mod spotify;
+pub mod user;
 
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use std::time::Duration;
