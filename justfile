@@ -14,3 +14,6 @@ migrate *FLAGS:
 generate: generate-entities
 generate-entities:
     sea-orm-cli generate entity -o ./entity/src/entities
+
+build *FLAGS:
+    cargo build {{FLAGS}}
