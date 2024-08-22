@@ -8,6 +8,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     pub track_id: i32,
+    #[sea_orm(unique)]
     pub played_at: DateTime,
 }
 
