@@ -1,153 +1,7 @@
+use crate::music::spotify;
 use base64::prelude::*;
-use entity::{album, artist};
-use sea_orm::{prelude::Date, ActiveValue, NotSet};
-use serde::{Deserialize, Serialize};
-use surf::{http::mime, Body, Url};
+use surf::{http::mime, Url};
 use tracing::{debug, error};
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SpotifyError {
-    pub status: u16,
-    pub message: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Track {
-    pub name: String,
-    pub album: Album,
-    external_urls: ExternalUrls,
-}
-
-impl Into<entity::track::Entity> for Track {
-    fn into(self) -> entity::prelude::Track {
-        entity::prelude::Track {}
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Artist {
-    pub name: String,
-    external_urls: ExternalUrls,
-}
-
-impl Artist {
-    pub fn model(&self) -> artist::ActiveModel {
-        artist::ActiveModel {
-            id: NotSet,
-            name: ActiveValue::set(self.name.clone()),
-            created_at: NotSet,
-            updated_at: NotSet,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Album {
-    images: Vec<AlbumImage>,
-    pub name: String,
-    release_date: String,
-    album_type: String,
-    external_urls: ExternalUrls,
-    pub artists: Vec<Artist>,
-}
-
-impl Album {
-    pub fn model(&self) -> album::ActiveModel {
-        let release_date = Date::parse_from_str(&self.release_date, "%Y-%m-%d")
-            .expect("Failed to parse release date");
-        album::ActiveModel {
-            id: NotSet,
-            title: ActiveValue::set(self.name.clone()),
-            release_date: ActiveValue::set(release_date),
-            created_at: NotSet,
-            updated_at: NotSet,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct AlbumImage {
-    url: String,
-    width: u32,
-    height: u32,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ExternalUrls {
-    spotify: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct RecentTrack {
-    pub track: Track,
-    pub played_at: String,
-}
-
-impl Track {
-    pub fn model(&self) -> entity::track::ActiveModel {
-        entity::track::ActiveModel {
-            id: NotSet,
-            title: ActiveValue::set(self.name.clone()),
-            created_at: NotSet,
-            updated_at: NotSet,
-        }
-    }
-}
-
-pub trait RecentTrackExt {
-    fn artists(&self) -> Vec<Artist>;
-    fn albums(&self) -> Vec<Album>;
-}
-
-impl RecentTrackExt for Vec<RecentTrack> {
-    /// Gets all the artists from the recent tracks
-    fn artists(&self) -> Vec<Artist> {
-        self.iter()
-            .map(|track| track.track.album.artists.clone())
-            .flatten()
-            .collect()
-    }
-    /// Gets all the albums from the recent tracks
-    fn albums(&self) -> Vec<Album> {
-        self.iter().map(|track| track.track.album.clone()).collect()
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct RecentTracksResponse {
-    pub items: Option<Vec<RecentTrack>>,
-    pub error: Option<SpotifyError>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct RefreshTokenResponse {
-    pub access_token: String,
-    pub token_type: String,
-    pub scope: String,
-    pub expires_in: u32,
-}
-
-#[derive(Serialize)]
-struct SpotifyTokenRequest {
-    code: String,
-    redirect_uri: String,
-    grant_type: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct SpotifyTokenResponse {
-    pub access_token: String,
-    pub token_type: String,
-    pub scope: String,
-    pub expires_in: u64,
-    pub refresh_token: String,
-}
-
-impl Into<Body> for SpotifyTokenRequest {
-    fn into(self) -> Body {
-        Body::from_form(&self).expect("Failed to convert SpotifyTokenRequest to Body")
-    }
-}
 
 /// The primary client for interacting with the Spotify API
 pub struct SpotifyClient {
@@ -193,14 +47,14 @@ impl SpotifyClient {
         .expect("Failed to construct Spotify OAuth URL")
     }
     /// Get the access token from the authorization code
-    pub async fn get_tokens(&mut self, code: String) -> Result<&mut Self, SpotifyError> {
+    pub async fn get_tokens(&mut self, code: String) -> Result<&mut Self, spotify::SpotifyError> {
         const BASE_URL: &'static str = "https://accounts.spotify.com/api/token";
         let auth_header =
             BASE64_STANDARD.encode(format!("{}:{}", self.client_id, self.client_secret));
-        let res: SpotifyTokenResponse = surf::post(BASE_URL)
+        let res: spotify::SpotifyTokenResponse = surf::post(BASE_URL)
             .header("Authorization", format!("Basic {}", auth_header))
             .content_type(mime::FORM)
-            .body(SpotifyTokenRequest {
+            .body(spotify::SpotifyTokenRequest {
                 code,
                 redirect_uri: self.redirect_uri.clone(),
                 grant_type: "authorization_code".to_string(),
@@ -229,12 +83,14 @@ impl SpotifyClient {
         self
     }
     /// Get a new access token using the refresh token
-    pub async fn refresh_access_token(&self) -> Result<RefreshTokenResponse, SpotifyError> {
+    pub async fn refresh_access_token(
+        &self,
+    ) -> Result<spotify::RefreshTokenResponse, spotify::SpotifyError> {
         // If a refresh_token does not exist, we cannot get a new access token
         let refresh_token = match &self.refresh_token {
             Some(token) => token,
             None => {
-                return Err(SpotifyError {
+                return Err(spotify::SpotifyError {
                     status: 400,
                     message: "No refresh token provided".to_string(),
                 })
@@ -245,7 +101,7 @@ impl SpotifyClient {
             .await
             .map_err(|err| {
                 error!("Failed to fetch new access token from Spotify {:?}", err);
-                SpotifyError {
+                spotify::SpotifyError {
                     status: 500,
                     message: "Internal error requesting access token from Spotify".to_string(),
                 }
@@ -254,16 +110,18 @@ impl SpotifyClient {
         Ok(new_token)
     }
     /// Fetch the recent tracks from Spotify
-    pub async fn get_recent_tracks(&self) -> Result<RecentTracksResponse, SpotifyError> {
+    pub async fn get_recent_tracks(
+        &self,
+    ) -> Result<spotify::RecentTracksResponse, spotify::SpotifyError> {
         let access_token = self.access_token.as_ref().unwrap();
         const ENDPOINT: &'static str = "https://api.spotify.com/v1/me/player/recently-played";
-        let tracks: RecentTracksResponse = surf::get(ENDPOINT)
+        let tracks: spotify::RecentTracksResponse = surf::get(ENDPOINT)
             .header("Authorization", format!("Bearer {}", access_token))
             .recv_json()
             .await
             .map_err(|err| {
                 error!("Failed to fetch json from spotify {:?}", err);
-                SpotifyError {
+                spotify::SpotifyError {
                     status: 500,
                     message: "Internal error requesting recent tracks from Spotify".to_string(),
                 }
@@ -278,19 +136,19 @@ impl SpotifyClient {
     /// Send request to Spotify to refresh the access token
     pub(crate) async fn request_access_token(
         refresh_token: String,
-    ) -> Result<RefreshTokenResponse, SpotifyError> {
+    ) -> Result<spotify::RefreshTokenResponse, spotify::SpotifyError> {
         const ENDPOINT: &'static str = "https://accounts.spotify.com/api/token";
-        let client_id = std::env::var("SPOTIFY_ID").map_err(|_| SpotifyError {
+        let client_id = std::env::var("SPOTIFY_ID").map_err(|_| spotify::SpotifyError {
             status: 500,
             message: "Missing Spotify Client ID".to_string(),
         })?;
-        let client_secret = std::env::var("SPOTIFY_SECRET").map_err(|_| SpotifyError {
+        let client_secret = std::env::var("SPOTIFY_SECRET").map_err(|_| spotify::SpotifyError {
             status: 500,
             message: "Missing Spotify Client Secret".to_string(),
         })?;
         let auth = BASE64_STANDARD.encode(format!("{}:{}", client_id, client_secret));
         let body = format!("grant_type=refresh_token&refresh_token={}", refresh_token);
-        let token: RefreshTokenResponse = surf::post(ENDPOINT)
+        let token: spotify::RefreshTokenResponse = surf::post(ENDPOINT)
             .header("Authorization", format!("Basic {}", auth))
             .content_type(mime::FORM)
             .body(body)
@@ -298,7 +156,7 @@ impl SpotifyClient {
             .await
             .map_err(|err| {
                 error!("Failed to fetch json from spotify {:?}", err);
-                SpotifyError {
+                spotify::SpotifyError {
                     status: 500,
                     message: "Internal error requesting access token from Spotify".to_string(),
                 }

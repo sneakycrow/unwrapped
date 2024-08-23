@@ -5,7 +5,7 @@ use axum::{
 };
 use lib::{
     db::user::{create_user_with_account, CreateUserOptions},
-    music::spotify::SpotifyClient,
+    music::spotify::client::SpotifyClient,
 };
 use serde::Deserialize;
 use tracing::error;
