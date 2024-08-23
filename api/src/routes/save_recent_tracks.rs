@@ -4,7 +4,9 @@ use axum::{
 };
 use entity::{album, artist, play_log, track};
 use lib::db;
-use lib::music::spotify::{client::SpotifyClient, RecentTrack, RecentTrackExt, SpotifyError};
+use lib::music::spotify::{
+    client::SpotifyClient, vendor::RecentTrack, RecentTrackExt, SpotifyError,
+};
 use sea_orm::{sqlx::types::chrono::DateTime, ActiveValue::NotSet, DatabaseConnection, Set};
 use serde::Deserialize;
 use tracing::{debug, error};
