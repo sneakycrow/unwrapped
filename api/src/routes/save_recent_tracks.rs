@@ -17,7 +17,7 @@ pub struct Tokens {
     refresh_token: Option<String>,
 }
 
-struct Collection {
+struct RecentTrackCollection {
     recent_tracks: Option<Vec<RecentTrack>>,
     updated_token: Option<String>,
     db_artists: Option<Vec<artist::Model>>,
@@ -25,7 +25,7 @@ struct Collection {
     db_tracks: Option<Vec<track::Model>>,
 }
 
-impl Collection {
+impl RecentTrackCollection {
     fn new() -> Self {
         Self {
             recent_tracks: None,
@@ -44,7 +44,13 @@ impl Collection {
         refresh_token: Option<String>,
     ) -> Result<&mut Self, SpotifyError> {
         // Generate a client for interacting with Spotify
-        let client = SpotifyClient::new(access_token).set_refresh_token(refresh_token);
+        let mut client = SpotifyClient::new();
+        // Set the access token on the client
+        client.set_access_token(access_token);
+        // If a refresh token is provided, set it on the client
+        if let Some(refresh_token) = refresh_token {
+            client.set_refresh_token(refresh_token);
+        }
         // Fetch the recent tracks from Spotify
         match client.get_recent_tracks().await {
             Ok(recent_tracks) => {
@@ -177,7 +183,7 @@ impl Collection {
     }
     /// Upsert the playlogs from the recent tracks into the database
     async fn upsert_playlogs(&mut self, conn: &DatabaseConnection) -> Result<&mut Self, DBError> {
-        // Finally, create the playlogs from the recent tracks
+        // Create the playlogs from the recent tracks
         let raw_playlogs: Vec<play_log::ActiveModel> = self
             .recent_tracks
             .as_ref()
@@ -205,7 +211,7 @@ impl Collection {
                 }
             })
             .collect();
-
+        // Upsert them to the database
         db::spotify::upsert_playlogs(raw_playlogs, conn)
             .await
             .expect("Error upserting playlogs");
@@ -214,7 +220,7 @@ impl Collection {
     }
 }
 
-/// Collect goes to each of the configured providers, collects the relative data, and saves it to the DB
+/// A route that grabs recent tracks from spotify, parses them, and upserts them into the database
 pub async fn route(
     State(state): State<crate::routes::AppState>,
     tokens: Query<Tokens>,
@@ -223,7 +229,7 @@ pub async fn route(
     let access_token = tokens.access_token.to_owned();
     let refresh_token = tokens.refresh_token.to_owned();
     // Initialize the collection
-    Collection::new()
+    RecentTrackCollection::new()
         // Collect tracks from spotify
         .collect_recent_tracks(access_token, refresh_token)
         .await

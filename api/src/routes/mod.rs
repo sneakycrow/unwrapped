@@ -1,5 +1,5 @@
 mod auth;
-mod collect;
+mod save_recent_tracks;
 
 use crate::assets::Assets;
 use axum::{response::Html, routing::get, Router};
@@ -11,14 +11,13 @@ pub struct AppState {
 }
 
 pub fn router(state: AppState) -> Router {
-    let auth_router = auth::get_auth_router();
-    let collect_router = Router::new()
-        .route("/", get(index))
-        .route("/collect", get(collect::route));
     Router::new()
-        .merge(collect_router)
+        .route("/", get(index))
+        .route("/save-recent-tracks", get(save_recent_tracks::route))
+        .route("/login", get(auth::login))
+        .route("/auth/spotify", get(auth::spotify_auth))
+        .route("/auth/spotify/callback", get(auth::spotify_auth_callback))
         .with_state(state)
-        .merge(auth_router)
 }
 
 async fn index() -> Html<String> {

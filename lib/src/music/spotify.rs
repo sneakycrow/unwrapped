@@ -2,7 +2,7 @@ use base64::prelude::*;
 use entity::{album, artist};
 use sea_orm::{prelude::Date, ActiveValue, NotSet};
 use serde::{Deserialize, Serialize};
-use surf::http::mime;
+use surf::{http::mime, Body, Url};
 use tracing::{debug, error};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -113,12 +113,6 @@ impl RecentTrackExt for Vec<RecentTrack> {
     }
 }
 
-/// The primary client for interacting with the Spotify API
-pub struct SpotifyClient {
-    pub access_token: String,
-    pub refresh_token: Option<String>,
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RecentTracksResponse {
     pub items: Option<Vec<RecentTrack>>,
@@ -133,22 +127,105 @@ pub struct RefreshTokenResponse {
     pub expires_in: u32,
 }
 
+#[derive(Serialize)]
+struct SpotifyTokenRequest {
+    code: String,
+    redirect_uri: String,
+    grant_type: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct SpotifyTokenResponse {
+    pub access_token: String,
+    pub token_type: String,
+    pub scope: String,
+    pub expires_in: u64,
+    pub refresh_token: String,
+}
+
+impl Into<Body> for SpotifyTokenRequest {
+    fn into(self) -> Body {
+        Body::from_form(&self).expect("Failed to convert SpotifyTokenRequest to Body")
+    }
+}
+
+/// The primary client for interacting with the Spotify API
+pub struct SpotifyClient {
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
+    pub client_id: String,
+    pub client_secret: String,
+    pub scopes: String,
+    pub redirect_uri: String,
+}
+
 impl SpotifyClient {
-    /// Create a new SpotifyClient with an access token
-    pub fn new(access_token: String) -> Self {
-        SpotifyClient {
-            access_token,
+    /// Create a new SpotifyClient with credentials from environment variables
+    fn from_env() -> Self {
+        // Get the values from environment variables
+        let client_id = std::env::var("SPOTIFY_ID").expect("SPOTIFY_CLIENT_ID not set");
+        let client_secret = std::env::var("SPOTIFY_SECRET").expect("SPOTIFY_CLIENT_SECRET not set");
+        let scopes = std::env::var("SPOTIFY_SCOPES").expect("SPOTIFY_SCOPES not set");
+        let redirect_uri =
+            std::env::var("SPOTIFY_REDIRECT_URI").expect("SPOTIFY_REDIRECT_URI not set");
+        Self {
+            access_token: None,
             refresh_token: None,
+            client_id,
+            client_secret,
+            scopes,
+            redirect_uri,
         }
     }
+    /// Generate an authorization url for the user to login
+    pub fn get_authorize_url() -> Url {
+        const BASE_URL: &'static str = "https://accounts.spotify.com/authorize?";
+        let creds = Self::from_env();
+        Url::parse_with_params(
+            BASE_URL,
+            &[
+                ("response_type", "code"),
+                ("client_id", &creds.client_id),
+                ("scope", &creds.scopes),
+                ("redirect_uri", &creds.redirect_uri),
+            ],
+        )
+        .expect("Failed to construct Spotify OAuth URL")
+    }
+    /// Get the access token from the authorization code
+    pub async fn get_tokens(&mut self, code: String) -> Result<&mut Self, SpotifyError> {
+        const BASE_URL: &'static str = "https://accounts.spotify.com/api/token";
+        let auth_header =
+            BASE64_STANDARD.encode(format!("{}:{}", self.client_id, self.client_secret));
+        let res: SpotifyTokenResponse = surf::post(BASE_URL)
+            .header("Authorization", format!("Basic {}", auth_header))
+            .content_type(mime::FORM)
+            .body(SpotifyTokenRequest {
+                code,
+                redirect_uri: self.redirect_uri.clone(),
+                grant_type: "authorization_code".to_string(),
+            })
+            .recv_json()
+            .await
+            .map_err(|e| error!("Failed to request access token from Spotify: {}", e))
+            .unwrap();
+
+        Ok(self
+            .set_access_token(res.access_token)
+            .set_refresh_token(res.refresh_token))
+    }
+    /// Create a new SpotifyClient
+    pub fn new() -> Self {
+        Self::from_env()
+    }
     /// Set the refresh token for the client
-    pub fn set_refresh_token(mut self, refresh_token: Option<String>) -> Self {
-        self.refresh_token = refresh_token;
+    pub fn set_refresh_token(&mut self, refresh_token: String) -> &mut Self {
+        self.refresh_token = Some(refresh_token);
         self
     }
     /// Set the access token for the client
-    pub fn set_access_token(mut self, access_token: String) -> Self {
-        self.access_token = access_token;
+    pub fn set_access_token(&mut self, access_token: String) -> &mut Self {
+        self.access_token = Some(access_token);
         self
     }
     /// Get a new access token using the refresh token
@@ -178,13 +255,10 @@ impl SpotifyClient {
     }
     /// Fetch the recent tracks from Spotify
     pub async fn get_recent_tracks(&self) -> Result<RecentTracksResponse, SpotifyError> {
-        debug!(
-            "Fetching recent tracks from Spotify using access token {}",
-            self.access_token
-        );
+        let access_token = self.access_token.as_ref().unwrap();
         const ENDPOINT: &'static str = "https://api.spotify.com/v1/me/player/recently-played";
         let tracks: RecentTracksResponse = surf::get(ENDPOINT)
-            .header("Authorization", format!("Bearer {}", self.access_token))
+            .header("Authorization", format!("Bearer {}", access_token))
             .recv_json()
             .await
             .map_err(|err| {
