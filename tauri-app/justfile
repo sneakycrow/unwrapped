@@ -1,0 +1,2 @@
+dev:
+    yarn tauri dev
