@@ -12,3 +12,6 @@ generate-entities:
 
 build *FLAGS:
     cargo build {{FLAGS}}
+
+dev-app:
+    @just tauri-app/dev
