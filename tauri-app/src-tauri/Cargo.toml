@@ -15,7 +15,11 @@ crate-type = ["lib", "cdylib", "staticlib"]
 tauri-build = { version = "2.0.0-rc", features = [] }
 
 [dependencies]
+log = "0.4"
 tauri = { version = "2.0.0-rc", features = [] }
 tauri-plugin-shell = "2.0.0-rc"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tauri-plugin-deep-link = "2.0.0-rc"
+tauri-plugin-log = "2.0.0-rc"
+tauri-plugin-single-instance = "2.0.0-rc"

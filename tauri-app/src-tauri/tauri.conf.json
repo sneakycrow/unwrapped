@@ -1,5 +1,5 @@
 {
-  "productName": "tauri-app",
+  "productName": "unwrapped",
   "version": "0.1.0",
   "identifier": "dev.sneakycrow.unwrapped",
   "build": {
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "tauri-app",
+        "title": "UNWRAPPED",
         "width": 800,
         "height": 600
       }
@@ -30,5 +30,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["unwrapped"]
+      }
+    }
   }
 }
