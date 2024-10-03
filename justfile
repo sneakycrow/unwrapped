@@ -12,3 +12,6 @@ generate-entities:
 
 build *FLAGS:
     cargo build {{FLAGS}}
+
+start-api:
+    @just api/start
